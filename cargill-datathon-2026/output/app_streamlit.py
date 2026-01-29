@@ -1,8 +1,9 @@
-"""Interactive Streamlit UI for the freight calculator chatbot demo."""
 from __future__ import annotations
 import streamlit as st
 import pandas as pd
 import numpy as np
+import requests 
+import json
 from freight_api import load_data, get_risk_report
 
 from voyage_economics import (
@@ -113,37 +114,53 @@ def compute_adjusted_profit(row, vlsfo_new, mgo_new):
         "adj_tce": adj_tce,
         "days": days,
     }
-
 # ---------------- Main content ----------------
+# Persist 'submitted' state in session_state
+if "submitted" not in st.session_state:
+    st.session_state.submitted = False
+
 if submitted:
-    mask = (results_df["vessel"] == vessel) & (results_df["cargo"] == cargo)
-    if not mask.any():
-        st.error("No matching vessel–cargo combination found.")
-        st.stop()
-    row = results_df[mask].iloc[0].to_dict()
+    st.session_state.submitted = True
 
-    # Run partial voyage recalculation
-    adjusted = run_partial_voyage(
-        base_row=row,
-        vlsfo_price=vlsfo_price,
-        mgo_price=mgo_price,
-        speed_knots=speed_knots,
-        extra_days=extra_days,
-    )
+if st.session_state.submitted:
+    # Ensure the selected row is persisted
+    if "selected_row" not in st.session_state:
+        mask = (results_df["vessel"] == vessel) & (results_df["cargo"] == cargo)
+        if not mask.any():
+            st.error("No matching vessel–cargo combination found.")
+            st.stop()
+        st.session_state.selected_row = results_df[mask].iloc[0].to_dict()
+    
+    row = st.session_state.selected_row
 
-    # Safe fallback for missing keys
-    if "adj_profit" not in adjusted:
-        comp = compute_adjusted_profit(row, vlsfo_price, mgo_price)
-        adjusted.setdefault("adj_profit", comp["adj_profit"])
-        adjusted.setdefault("adj_tce", comp["adj_tce"])
-        adjusted.setdefault("orig_profit", comp["orig_profit"])
-        adjusted.setdefault("orig_tce", comp["orig_tce"])
-        adjusted.setdefault("profit", comp["adj_profit"])
-        adjusted.setdefault("tce", comp["adj_tce"])
-        adjusted.setdefault("days", comp["days"])
+    # Compute adjusted values if not already persisted
+    if "adjusted" not in st.session_state:
+        adjusted = run_partial_voyage(
+            base_row=row,
+            vlsfo_price=vlsfo_price,
+            mgo_price=mgo_price,
+            speed_knots=speed_knots,
+            extra_days=extra_days,
+        )
+
+        # Fallback for missing keys
+        if "adj_profit" not in adjusted:
+            comp = compute_adjusted_profit(row, vlsfo_price, mgo_price)
+            adjusted.setdefault("adj_profit", comp["adj_profit"])
+            adjusted.setdefault("adj_tce", comp["adj_tce"])
+            adjusted.setdefault("orig_profit", comp["orig_profit"])
+            adjusted.setdefault("orig_tce", comp["orig_tce"])
+            adjusted.setdefault("profit", comp["adj_profit"])
+            adjusted.setdefault("tce", comp["adj_tce"])
+            adjusted.setdefault("days", comp["days"])
+
+        st.session_state.adjusted = adjusted
+    else:
+        adjusted = st.session_state.adjusted
+
 
     # ---------------- Tabs ----------------
-    tab1, tab2, tab3 = st.tabs(["📊 Recommendation", "📈 Top Assignments", "🧠 Risk & Context"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 Recommendation", "📈 Top Assignments", "🧠 Risk & Context", "🤖 AI Chatbot"])
 
     # -------- TAB 1: Recommendation --------
     with tab1:
@@ -209,3 +226,59 @@ if submitted:
     with tab3:
         risk_report = get_risk_report(".")
         st.json(risk_report if isinstance(risk_report, dict) else {})
+
+
+    # ---- TAB 4: Chatbot ----
+    with tab4:
+        st.subheader("🤖 Freight Decision AI Assistant")
+
+        if "chat_history" not in st.session_state:
+            st.session_state.chat_history = []
+
+        chat_container = st.container()
+        with chat_container:
+            for msg in st.session_state.chat_history:
+                with st.chat_message(msg["role"]):
+                    st.write(msg["content"])
+
+        # User input
+        user_input = st.chat_input("Ask about voyage recommendations...")
+
+        if user_input:
+            st.session_state.chat_history.append({"role": "user", "content": user_input})
+            
+            # Display user message immediately
+            with st.chat_message("user"):
+                st.write(user_input)
+
+            current_rec = f"""
+Current Best Recommendation:
+- Vessel: {row.get('vessel', 'N/A')}
+- Cargo: {row.get('cargo', 'N/A')}
+- Adjusted Profit: ${adjusted.get('adj_profit', 0):,.0f}
+- Adjusted TCE: ${adjusted.get('adj_tce', 0):,.0f}
+- Voyage Days: {adjusted.get('days', 0):.1f}
+"""
+
+            # Query Ollama
+            try:
+                with st.chat_message("assistant"):
+                    response = requests.post(
+                        "http://localhost:11434/api/generate",
+                        json={
+                            "model": "tinyllama",
+                            "prompt": f"{current_rec}\nUser Query: {user_input}",
+                            "stream": False,
+                        },
+                        timeout=30,
+                    )
+                    if response.status_code == 200:
+                        assistant_response = response.json().get("response", "No response generated.")
+                        st.write(assistant_response)
+                        st.session_state.chat_history.append({"role": "assistant", "content": assistant_response})
+                    else:
+                        st.error(f"Ollama error: {response.status_code}")
+            except requests.exceptions.ConnectionError:
+                st.error("⚠️ Ollama not running.")
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
