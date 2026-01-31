@@ -122,6 +122,14 @@ if "submitted" not in st.session_state:
 if submitted:
     st.session_state.submitted = True
 
+current_sig = (vessel, cargo, vlsfo_price, mgo_price, speed_knots, extra_days)
+
+    # If inputs changed, clear cached results
+if st.session_state.get("last_sig") != current_sig:
+        st.session_state.last_sig = current_sig
+        st.session_state.pop("adjusted", None)
+        st.session_state.pop("selected_row", None)
+
 if st.session_state.submitted:
     # Ensure the selected row is persisted
     if "selected_row" not in st.session_state:
@@ -212,6 +220,7 @@ if st.session_state.submitted:
         # Sort by selected first, then adj_profit descending
         top_df = top_df.sort_values(["selected", "adj_profit"], ascending=[False, False]).head(10)
 
+
         display_cols = ["vessel", "cargo", "adj_profit", "adj_tce", "days", "selected"]
         display_cols = [c for c in display_cols if c in top_df.columns]
 
@@ -261,24 +270,31 @@ Current Best Recommendation:
 """
 
             # Query Ollama
-            try:
-                with st.chat_message("assistant"):
-                    response = requests.post(
-                        "http://localhost:11434/api/generate",
-                        json={
-                            "model": "tinyllama",
-                            "prompt": f"{current_rec}\nUser Query: {user_input}",
-                            "stream": False,
-                        },
-                        timeout=30,
-                    )
-                    if response.status_code == 200:
-                        assistant_response = response.json().get("response", "No response generated.")
-                        st.write(assistant_response)
-                        st.session_state.chat_history.append({"role": "assistant", "content": assistant_response})
-                    else:
-                        st.error(f"Ollama error: {response.status_code}")
-            except requests.exceptions.ConnectionError:
-                st.error("⚠️ Ollama not running.")
-            except Exception as e:
-                st.error(f"Error: {str(e)}")
+            with st.chat_message("assistant"):
+                status = st.empty()
+
+                with st.spinner("🤖 Generating response..."):
+                    try:
+                        response = requests.post(
+                            "http://localhost:11434/api/generate",
+                            json={
+                                "model": "tinyllama",
+                                "prompt": f"{current_rec}\nUser Query: {user_input}",
+                                "stream": False,
+                            },
+                            timeout=30,
+                        )
+
+                        if response.status_code == 200:
+                            assistant_response = response.json().get("response", "No response generated.")
+                            status.write(assistant_response)
+                            st.session_state.chat_history.append(
+                                {"role": "assistant", "content": assistant_response}
+                            )
+                        else:
+                            status.error(f"Ollama error: {response.status_code}")
+
+                    except requests.exceptions.ConnectionError:
+                        status.error("⚠️ Ollama not running.")
+                    except Exception as e:
+                        status.error(f"Error: {str(e)}")
