@@ -197,6 +197,7 @@ This project is part of the Cargill Datathon 2026.
 
 ## 👥 Contributors
 
+Team **sudo Let Us Cook**
 - **Muskan Dhamuria** - Developer
 - **Tan Mei Yu** - Developer
 - **Raye Yap** - Developer
