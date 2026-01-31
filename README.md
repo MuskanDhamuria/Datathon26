@@ -36,6 +36,31 @@ The Freight Decision Assistant helps freight operators make data-driven decision
 - Natural language queries about voyage recommendations
 - Contextual analysis of trade-offs
 
+## File Structure
+cargill-datathon-2026/
+│
+├── notebooks/
+│   └── main.ipynb
+|   └── Port Distances.csv
+│
+├── output/
+│   ├── app_streamlit.py
+│   ├── freight_api.py
+│   ├── freight_calculator_assignments.csv (output from main.ipynb)
+│   ├── freight_calculator_scenarios.csv (output from main.ipynb)
+│   |── voyage_economics.py
+|   |── freight_calculator_all_combinations.csv (output from main.ipynb)
+│   
+├── .vscode/
+│   └── settings.json
+│
+├── .venv/                
+├── venv/                
+│
+├── README.md
+
+
+
 ## 🛠️ Installation
 
 ### Setup
@@ -164,7 +189,7 @@ ollama pull tinyllama
 ## 📞 Support
 
 For issues or questions:
-Contact Product Manager, Raye Yap, at rayeyap.work@gmail.com 
+Contact Raye Yap at rayeyap.work@gmail.com 
 
 ## 📝 License
 
@@ -172,9 +197,9 @@ This project is part of the Cargill Datathon 2026.
 
 ## 👥 Contributors
 
-- **Muskan Dhamuria** - Developer, Cybersecurity VP
-- **Tan Mei Yu** - Developer, HR VP
-- **Raye Yap** - Developer, Product VP
+- **Muskan Dhamuria** - Developer
+- **Tan Mei Yu** - Developer
+- **Raye Yap** - Developer
 
 ---
 
